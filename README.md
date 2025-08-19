@@ -274,9 +274,7 @@ Enterprise support available with SLA guarantees. Contact sales@your-company.com
 
 | Version | Release Date | Highlights |
 |---------|-------------|------------|
-| 1.0.0 | 2025-01-15 | Initial release with core migration features |
-| 0.9.0 | 2024-12-01 | Beta release with community feedback |
-| 0.8.0 | 2024-10-15 | Alpha release for early adopters |
+| 0.0.1 | 2025-09-25 | Alpha release for early adopters |
 
 ## 🏆 Credits
 
