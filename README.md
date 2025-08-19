@@ -54,7 +54,7 @@ camel-migrate --source ./my-camel2-app --output ./my-camel4-app
 ### Project Requirements
 - **Source**: Apache Camel 2.x project
 - **Build System**: Maven (pom.xml based)
-- **Java**: JDK 8 or 11 (source), will migrate to JDK 17+ compatible
+- **Java**: JDK 8 or 11 (source), will migrate to JDK 21+ compatible
 
 ## 💻 Installation
 
@@ -146,7 +146,7 @@ Status: ✅ SUCCESS
 📦 Dependencies Updated: 47
    - Camel Core: 2.25.4 → 4.4.0
    - Spring Boot: N/A → 3.2.0
-   - Java Target: 8 → 17
+   - Java Target: 8 → 21
 
 📝 Routes Converted: 12
    - XML DSL: 8 routes → Java DSL
@@ -245,7 +245,7 @@ camel-migrate --source ./my-app --diagnose
 
 ### ❌ Not Supported
 - Camel 1.x projects
-- Gradle build system (coming soon)
+- Gradle build system
 - OSGi bundles
 
 ## 🔐 Security & Privacy
