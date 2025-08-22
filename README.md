@@ -2,6 +2,7 @@
 
 **Automated Apache Camel 2 to Camel 4 Migration Solution**
 
+
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/your-org/camel-migration-tool)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://hub.docker.com/r/your-org/camel-migration-tool)
