@@ -1,0 +1,146 @@
+# Dockerfile.vllm-arm64 - Simplified version for ARM64/Mac
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git build-essential curl && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV CUDA_VISIBLE_DEVICES="" \
+    VLLM_TARGET_DEVICE=cpu \
+    PIP_NO_CACHE_DIR=1 \
+    VLLM_LOGGING_LEVEL=INFO \
+    VLLM_USE_MODELSCOPE=false
+
+# CPU-only PyTorch for ARM64
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
+      torch torchvision torchaudio
+
+# Install transformers-based API server dependencies (vLLM doesn't work well on ARM64 yet)
+RUN pip install --no-cache-dir \
+      "transformers>=4.43" \
+      "tokenizers>=0.19" \
+      "accelerate" \
+      "fastapi" \
+      "uvicorn[standard]" \
+      "pydantic>=2.0" \
+      "numpy<2.0.0" \
+      "huggingface_hub>=0.23"
+
+# Create app directory
+WORKDIR /app
+
+# Create simple OpenAI-compatible API server
+RUN echo 'import os\n\
+import json\n\
+import time\n\
+import uuid\n\
+from datetime import datetime\n\
+from typing import List, Optional, Dict, Any\n\
+from fastapi import FastAPI, HTTPException, Header\n\
+from pydantic import BaseModel\n\
+import torch\n\
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline\n\
+import uvicorn\n\
+\n\
+# Set thread count for optimization\n\
+torch.set_num_threads(int(os.getenv("OMP_NUM_THREADS", "4")))\n\
+\n\
+app = FastAPI(title="Optimized OpenAI Compatible API", version="1.0.0")\n\
+\n\
+# Global model variables\n\
+model = None\n\
+tokenizer = None\n\
+generator = None\n\
+MODEL_NAME = os.getenv("MODEL", "Qwen/Qwen2.5-1.5B-Instruct")\n\
+\n\
+class ChatMessage(BaseModel):\n\
+    role: str\n\
+    content: str\n\
+\n\
+class ChatCompletionRequest(BaseModel):\n\
+    model: str\n\
+    messages: List[ChatMessage]\n\
+    max_tokens: Optional[int] = 64\n\
+    temperature: Optional[float] = 0.1\n\
+    top_p: Optional[float] = 1.0\n\
+    stream: Optional[bool] = False\n\
+\n\
+class ChatCompletionResponse(BaseModel):\n\
+    id: str\n\
+    object: str = "chat.completion"\n\
+    created: int\n\
+    model: str\n\
+    choices: List[Dict[str, Any]]\n\
+    usage: Dict[str, int]\n\
+\n\
+def load_model():\n\
+    global generator\n\
+    if generator is None:\n\
+        print(f"Loading optimized model: {MODEL_NAME}")\n\
+        generator = pipeline(\n\
+            "text-generation",\n\
+            model=MODEL_NAME,\n\
+            torch_dtype=torch.float32,\n\
+            device_map="cpu",\n\
+            trust_remote_code=True,\n\
+            model_kwargs={"low_cpu_mem_usage": True}\n\
+        )\n\
+        print("Optimized model loaded successfully!")\n\
+\n\
+@app.on_event("startup")\n\
+async def startup_event():\n\
+    load_model()\n\
+\n\
+@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)\n\
+async def create_chat_completion(request: ChatCompletionRequest, authorization: Optional[str] = Header(None)):\n\
+    try:\n\
+        conversation = ""\n\
+        for message in request.messages[-3:]:  # Only last 3 messages for speed\n\
+            if message.role == "system":\n\
+                conversation += f"System: {message.content}\\n"\n\
+            elif message.role == "user":\n\
+                conversation += f"User: {message.content}\\n"\n\
+            elif message.role == "assistant":\n\
+                conversation += f"Assistant: {message.content}\\n"\n\
+        conversation += "Assistant: "\n\
+        \n\
+        # Use pipeline for faster inference\n\
+        result = generator(\n\
+            conversation,\n\
+            max_new_tokens=min(request.max_tokens, 100),\n\
+            temperature=max(request.temperature, 0.1),\n\
+            top_p=request.top_p,\n\
+            do_sample=True,\n\
+            return_full_text=False\n\
+        )\n\
+        \n\
+        response_text = result[0]["generated_text"].strip()\n\
+        \n\
+        completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"\n\
+        created = int(time.time())\n\
+        \n\
+        return ChatCompletionResponse(\n\
+            id=completion_id,\n\
+            created=created,\n\
+            model=request.model,\n\
+            choices=[{"index": 0, "message": {"role": "assistant", "content": response_text}, "finish_reason": "stop"}],\n\
+            usage={"prompt_tokens": len(conversation.split()), "completion_tokens": len(response_text.split()), "total_tokens": len(conversation.split()) + len(response_text.split())}\n\
+        )\n\
+    except Exception as e:\n\
+        raise HTTPException(status_code=500, detail=f"Error generating completion: {str(e)}")\n\
+\n\
+@app.get("/v1/models")\n\
+async def list_models():\n\
+    return {"object": "list", "data": [{"id": MODEL_NAME, "object": "model", "created": int(time.time()), "owned_by": "local"}]}\n\
+\n\
+@app.get("/health")\n\
+async def health_check():\n\
+    return {"status": "healthy", "model": MODEL_NAME}\n\
+\n\
+if __name__ == "__main__":\n\
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")' > openai_api_server.py
+
+EXPOSE 8000
+ENV MODEL="Qwen/Qwen2.5-1.5B-Instruct"
+
+CMD ["python", "openai_api_server.py"]
